@@ -1,9 +1,4 @@
 <!-- Скрипт маски ввода номера начало -->
-<link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/css/intlTelInput.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"></script>
-<script>
   $(document).ready(function() {
     $('input[ms-code-phone-number]').each(function() {
       var input = this;
@@ -53,48 +48,13 @@
     position: relative;
     display: flex;
     margin-bottom: 1rem;
-</style>
 
 
 
 
 
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Form Sender</title>
-    <style>
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            border-radius: 5px;
-            color: white;
-            font-weight: bold;
-            z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        .notification.success {
-            background-color: #28a745;
-        }
-        .notification.error {
-            background-color: #dc3545;
-        }
-        .notification.show {
-            opacity: 1;
-        }
-        .loading {
-            opacity: 0.7;
-            pointer-events: none;
-        }
-    </style>
-</head>
-<body>
-    <script>
+
+
         // Конфігурація Telegram бота
         const TELEGRAM_CONFIG = {
             botToken: '7972648152:AAEkEvxuTv4wrX0LEQkNhzSr7RRdRilA4-I',
@@ -505,14 +465,11 @@
                 });
             }
         };
-    </script>
-</body>
-</html>
 
 
 
 
-<script>
+
 document.addEventListener('DOMContentLoaded', function() {
     // Працює з усіма формами незалежно від класу/ID
     const forms = document.querySelectorAll('form');
@@ -529,4 +486,4 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
-</script>
+
