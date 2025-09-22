@@ -1,4 +1,4 @@
-<script>
+
         // Конфігурація Telegram бота
         const TELEGRAM_CONFIG = {
             botToken: '7972648152:AAEkEvxuTv4wrX0LEQkNhzSr7RRdRilA4-I', // Замініть на токен вашого бота
@@ -446,4 +446,3 @@
                 });
             }
         };
-    </script>
