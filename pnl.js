@@ -1,60 +1,3 @@
-<!-- Скрипт маски ввода номера начало -->
-  $(document).ready(function() {
-    $('input[ms-code-phone-number]').each(function() {
-      var input = this;
-      var preferredCountries = $(input).attr('ms-code-phone-number').split(',');
-
-      var iti = window.intlTelInput(input, {
-        preferredCountries: preferredCountries,
-        utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
-      });
-
-      $.get("https://ipinfo.io", function(response) {
-        var countryCode = response.country;
-        iti.setCountry(countryCode);
-      }, "jsonp");
-
-      input.addEventListener('change', formatPhoneNumber);
-      input.addEventListener('keyup', formatPhoneNumber);
-      input.addEventListener('keydown', restrictNonNumeric);
-
-      function formatPhoneNumber() {
-        var formattedNumber = iti.getNumber(intlTelInputUtils.numberFormat.NATIONAL);
-        input.value = formattedNumber;
-      }
-
-      function restrictNonNumeric(event) {
-        if (!event.key.match(/[0-9]/) && !isControlKey(event)) {
-          event.preventDefault();
-        }
-      }
-
-      function isControlKey(event) {
-        return ['Backspace', 'ArrowLeft', 'ArrowRight', 'Delete', 'Tab'].indexOf(event.key) !== -1;
-      }
-
-      var form = $(input).closest('form');
-      form.submit(function() {
-        var formattedNumber = iti.getNumber(intlTelInputUtils.numberFormat.INTERNATIONAL);
-        input.value = formattedNumber;
-      });
-    });
-  });
-</script>
-<!-- Скрипт маски ввода номера конец -->
-
-<style>
-.iti {
-    position: relative;
-    display: flex;
-    margin-bottom: 1rem;
-
-
-
-
-
-
-
         // Конфігурація Telegram бота
         const TELEGRAM_CONFIG = {
             botToken: '7972648152:AAEkEvxuTv4wrX0LEQkNhzSr7RRdRilA4-I',
@@ -466,24 +409,4 @@
             }
         };
 
-
-
-
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Працює з усіма формами незалежно від класу/ID
-    const forms = document.querySelectorAll('form');
-    
-    forms.forEach(function(form) {
-        form.addEventListener('submit', function(e) {
-            // Невелика затримка щоб переконатись що форма відправилась
-            setTimeout(function() {
-                if (typeof fbq !== 'undefined') {
-                    fbq('track', 'Lead');
-                    console.log('Facebook Lead event sent');
-                }
-            }, 100);
-        });
-    });
-});
 
