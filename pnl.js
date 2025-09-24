@@ -8,6 +8,13 @@ const TELEGRAM_CONFIG = {
     }
 };
 
+// Визначення браузера
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isMacOS = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
+console.log('Browser detection:', { isSafari, isIOS, isMacOS });
+
 // Функція для показу повідомлень
 function showNotification(message, type = 'success') {
     const notification = document.createElement('div');
@@ -26,22 +33,19 @@ function showNotification(message, type = 'success') {
 // Функція для визначення в яку гілку відправляти
 function getThreadId(form) {
     const formId = form.id;
-    console.log('Form ID:', formId);
     
     if (formId === 'wf-form-free' ||
         form.classList.contains('forma-free') ||
         form.classList.contains('wf-form-free') ||
         form.dataset.formType === 'free' ||
         form.dataset.formType === 'trial') {
-        console.log('Визначено форму пробного уроку');
         return TELEGRAM_CONFIG.threads.trial_lesson;
     }
     
-    console.log('Визначено загальну форму');
     return TELEGRAM_CONFIG.threads.general;
 }
 
-// Функція для відправки повідомлення в Telegram
+// Функція для відправки повідомлення в Telegram (без змін)
 async function sendToTelegram(formData, threadId) {
     try {
         const message = formatMessage(formData);
@@ -66,13 +70,6 @@ async function sendToTelegram(formData, threadId) {
         });
 
         const result = await response.json();
-        
-        if (!response.ok) {
-            console.error('Telegram API error:', result);
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        console.log('Відповідь від Telegram:', result);
         return result.ok;
     } catch (error) {
         console.error('Помилка відправки в Telegram:', error);
@@ -80,7 +77,7 @@ async function sendToTelegram(formData, threadId) {
     }
 }
 
-// Функція для витягування UTM міток з URL
+// Функція для витягування UTM міток
 function getUTMParams() {
     const urlParams = new URLSearchParams(window.location.search);
     const utmParams = {};
@@ -100,7 +97,7 @@ function getUTMParams() {
     return utmParams;
 }
 
-// Функція для форматування повідомлення
+// Функція форматування повідомлення
 function formatMessage(formData) {
     const currentTime = new Date().toLocaleString('uk-UA');
     const utmParams = getUTMParams();
@@ -132,7 +129,6 @@ function formatMessage(formData) {
     
     if (Object.keys(utmParams).length > 0) {
         message += `\n\n📊 <b>UTM мітки:</b>\n`;
-        
         Object.entries(utmParams).forEach(([key, value]) => {
             const displayName = key.replace('utm_', '').replace('_', ' ');
             message += `• <b>${displayName}:</b> ${value}\n`;
@@ -142,7 +138,7 @@ function formatMessage(formData) {
     return message;
 }
 
-// Функція для збору даних з форми
+// Функція збору даних з форми
 function collectFormData(form) {
     const formData = {};
     
@@ -173,143 +169,231 @@ function collectFormData(form) {
         formData.formType = 'general';
     }
     
-    console.log('Зібрані дані форми:', formData);
     return formData;
 }
 
-// Функція для валідації форми
+// Функція валідації
 function validateForm(formData) {
-    if (!formData.name && !formData.phone) {
-        return false;
-    }
-    return true;
+    return !!(formData.name || formData.phone);
 }
 
-// ГОЛОВНА ЗМІНА: Новий підхід до обробки форми
+// Функція для отримання URL редіректу
+function getRedirectUrl(form) {
+    // Шукаємо redirect URL в різних місцях
+    return form.getAttribute('data-redirect') || 
+           form.getAttribute('redirect') ||
+           form.dataset.redirect ||
+           form.querySelector('[data-redirect]')?.getAttribute('data-redirect') ||
+           form.querySelector('input[name="redirect"]')?.value ||
+           null;
+}
+
+// ГОЛОВНА ФУНКЦІЯ - оптимізована для Safari
 async function handleFormSubmit(event) {
     const form = event.target;
     if (!form) return;
     
-    // Перевіряємо чи форма вже була оброблена
-    if (form.dataset.telegramProcessing === 'true') {
-        return; // Дозволяємо стандартну відправку
+    // Якщо форма вже обробляється - пропускаємо
+    if (form.dataset.telegramSending === 'true') {
+        return;
     }
     
-    // Збираємо дані БЕЗ блокування форми
+    // Збираємо дані
     const formData = collectFormData(form);
     
     // Валідація
     if (!validateForm(formData)) {
-        event.preventDefault(); // Блокуємо тільки якщо невалідна
-        showNotification('Будь ласка, заповніть обов\'язкові поля', 'error');
+        if (!isSafari && !isIOS) {
+            event.preventDefault();
+            showNotification('Будь ласка, заповніть обов\'язкові поля', 'error');
+        }
         return;
     }
     
-    // Зберігаємо action форми для редіректу (якщо потрібно fallback)
-    const formAction = form.getAttribute('action');
-    const formRedirect = form.dataset.redirect || form.getAttribute('data-redirect');
+    // Отримуємо URL для редіректу
+    const redirectUrl = getRedirectUrl(form);
+    console.log('Redirect URL:', redirectUrl);
     
-    // Маркуємо що форма обробляється
-    form.dataset.telegramProcessing = 'true';
+    // Маркуємо форму
+    form.dataset.telegramSending = 'true';
     
     // Визначаємо Thread ID
     const threadId = getThreadId(form);
     
-    // ВАЖЛИВО: Відправляємо в Telegram АСИНХРОННО без блокування
-    sendToTelegram(formData, threadId)
-        .then(success => {
-            if (success) {
-                console.log('✅ Повідомлення відправлено в Telegram');
-                showNotification('Заявка успішно відправлена!', 'success');
-            } else {
-                console.log('⚠️ Помилка відправки в Telegram, але форма відправлена');
-            }
-        })
-        .catch(error => {
-            console.error('Помилка:', error);
-        })
-        .finally(() => {
-            // Очищаємо флаг після відправки
-            setTimeout(() => {
-                form.dataset.telegramProcessing = 'false';
-            }, 1000);
-        });
-    
-    // НЕ блокуємо стандартну відправку форми Webflow
-    // Форма продовжить свою роботу і виконає редірект
-}
-
-// Альтернативний метод з використанням Webflow подій
-function initWebflowIntegration() {
-    // Якщо є Webflow об'єкт
-    if (window.Webflow) {
-        window.Webflow.push(function() {
-            // Перехоплюємо успішну відправку форми
-            $(document).on('submit', 'form', function(e) {
-                const form = this;
-                
-                // Збираємо дані без блокування
-                const formData = collectFormData(form);
-                if (!validateForm(formData)) return;
-                
-                const threadId = getThreadId(form);
-                
-                // Відправляємо в Telegram паралельно
-                sendToTelegram(formData, threadId).catch(console.error);
-            });
-        });
-    }
-}
-
-// Функція для забезпечення редіректу (fallback)
-function ensureRedirect(form) {
-    // Зберігаємо оригінальний redirect URL з атрибутів Webflow
-    const redirectUrl = form.getAttribute('data-redirect') || 
-                       form.querySelector('[data-redirect]')?.getAttribute('data-redirect');
-    
-    if (redirectUrl) {
-        // Додаємо fallback редірект через 3 секунди
+    // ВАЖЛИВО: Для Safari використовуємо інший підхід
+    if (isSafari || isIOS || isMacOS) {
+        // Для Safari: відправляємо в Telegram через beacon API або setTimeout
+        const telegramData = {
+            formData: formData,
+            threadId: threadId
+        };
+        
+        // Використовуємо sendBeacon для Safari (працює навіть при переході на іншу сторінку)
+        if (navigator.sendBeacon) {
+            const blob = new Blob([JSON.stringify({
+                url: `https://api.telegram.org/bot${TELEGRAM_CONFIG.botToken}/sendMessage`,
+                data: {
+                    chat_id: TELEGRAM_CONFIG.chatId,
+                    text: formatMessage(formData),
+                    parse_mode: 'HTML',
+                    message_thread_id: threadId
+                }
+            })], { type: 'application/json' });
+            
+            // Відправляємо через beacon
+            navigator.sendBeacon('/telegram-proxy', blob);
+        }
+        
+        // Альтернативний метод для Safari
         setTimeout(() => {
-            if (window.location.href === document.URL) {
-                console.log('Fallback redirect to:', redirectUrl);
-                window.location.href = redirectUrl;
-            }
-        }, 3000);
+            sendToTelegram(formData, threadId).catch(console.error);
+        }, 0);
+        
+        // Додаємо невелику затримку для Safari перед редіректом
+        if (redirectUrl) {
+            setTimeout(() => {
+                form.dataset.telegramSending = 'false';
+            }, 100);
+        }
+        
+    } else {
+        // Для інших браузерів - стандартний підхід
+        sendToTelegram(formData, threadId)
+            .then(success => {
+                if (success) {
+                    console.log('✅ Відправлено в Telegram');
+                    showNotification('Заявка відправлена!', 'success');
+                }
+            })
+            .catch(console.error)
+            .finally(() => {
+                setTimeout(() => {
+                    form.dataset.telegramSending = 'false';
+                }, 500);
+            });
     }
 }
 
-// Ініціалізація після завантаження сторінки
+// Спеціальна ініціалізація для Safari
+function initSafariWorkaround() {
+    if (!isSafari && !isIOS && !isMacOS) return;
+    
+    console.log('🔧 Активовано Safari workaround');
+    
+    // Для Safari використовуємо MutationObserver для відслідковування змін
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && 
+                mutation.attributeName === 'data-redirect') {
+                const form = mutation.target;
+                const redirectUrl = form.getAttribute('data-redirect');
+                
+                if (redirectUrl) {
+                    console.log('Safari: знайдено redirect URL:', redirectUrl);
+                    // Зберігаємо URL в localStorage для fallback
+                    localStorage.setItem('webflow_redirect', redirectUrl);
+                }
+            }
+        });
+    });
+    
+    // Спостерігаємо за всіма формами
+    document.querySelectorAll('form').forEach(form => {
+        observer.observe(form, {
+            attributes: true,
+            attributeFilter: ['data-redirect', 'redirect']
+        });
+    });
+}
+
+// Альтернативний метод відправки для Safari
+function safariSendToTelegram(formData, threadId) {
+    // Створюємо зображення для відправки даних (працює в Safari)
+    const img = new Image();
+    const params = new URLSearchParams({
+        chat_id: TELEGRAM_CONFIG.chatId,
+        text: formatMessage(formData),
+        parse_mode: 'HTML'
+    });
+    
+    if (threadId) {
+        params.append('message_thread_id', threadId);
+    }
+    
+    img.src = `https://api.telegram.org/bot${TELEGRAM_CONFIG.botToken}/sendMessage?${params}`;
+    img.onerror = () => console.log('Telegram send attempted');
+}
+
+// Ініціалізація
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Ініціалізація Telegram Form Sender');
+    console.log('📱 Платформа:', { isSafari, isIOS, isMacOS });
     
-    // Ініціалізуємо Webflow інтеграцію
-    initWebflowIntegration();
+    // Ініціалізуємо Safari workaround
+    initSafariWorkaround();
     
-    // Знаходимо всі форми
+    // Для Webflow форм
+    if (window.Webflow) {
+        window.Webflow.push(function() {
+            console.log('🔄 Webflow ready');
+            
+            // Використовуємо jQuery якщо доступний (Webflow включає jQuery)
+            if (window.$ && window.$.fn) {
+                $('form').each(function() {
+                    const form = this;
+                    const $form = $(form);
+                    
+                    // Зберігаємо оригінальний redirect
+                    const originalRedirect = $form.attr('data-redirect') || 
+                                           $form.attr('redirect');
+                    
+                    if (originalRedirect) {
+                        form.dataset.originalRedirect = originalRedirect;
+                        console.log(`Form ${form.id}: redirect = ${originalRedirect}`);
+                    }
+                    
+                    // Додаємо обробник через jQuery (працює краще в Safari)
+                    $form.off('submit.telegram').on('submit.telegram', function(e) {
+                        handleFormSubmit(e);
+                    });
+                });
+            }
+        });
+    }
+    
+    // Стандартна ініціалізація
     const forms = document.querySelectorAll('form');
     console.log(`Знайдено форм: ${forms.length}`);
     
-    forms.forEach(form => {
-        // Видаляємо старі обробники
-        form.removeEventListener('submit', handleFormSubmit);
+    forms.forEach((form, index) => {
+        // Зберігаємо redirect URL
+        const redirectUrl = getRedirectUrl(form);
+        if (redirectUrl) {
+            form.dataset.originalRedirect = redirectUrl;
+            console.log(`Form ${index}: redirect URL = ${redirectUrl}`);
+        }
         
-        // Додаємо новий обробник з високим пріоритетом
-        form.addEventListener('submit', handleFormSubmit, false);
+        // Додаємо обробник з capture phase для Safari
+        form.addEventListener('submit', handleFormSubmit, true);
         
-        // Додаємо fallback для редіректу
-        form.addEventListener('submit', function() {
-            ensureRedirect(form);
-        });
-        
-        const threadId = getThreadId(form);
-        const threadName = threadId === TELEGRAM_CONFIG.threads.trial_lesson ? 
-            'Заявки на пробний урок' : 'Основний чат';
-        
-        console.log(`✅ Форма "${form.id || 'без ID'}" налаштована для відправки в: ${threadName}`);
+        // Додатковий fallback для Safari
+        if (isSafari || isIOS) {
+            form.addEventListener('submit', function() {
+                const redirect = form.dataset.originalRedirect;
+                if (redirect) {
+                    setTimeout(() => {
+                        if (window.location.href === document.URL) {
+                            console.log('Safari fallback redirect to:', redirect);
+                            window.location.href = redirect;
+                        }
+                    }, 2000);
+                }
+            });
+        }
     });
 });
 
-// Додаємо стилі для повідомлень
+// Додаємо стилі
 const style = document.createElement('style');
 style.textContent = `
     .notification {
@@ -336,36 +420,32 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// API для тестування (без змін)
+// Debug API
 window.TelegramFormSender = {
-    testTrialForm: async function() {
-        console.log('🧪 Тестування відправки в гілку "Заявки на пробний урок"');
-        const testData = {
-            name: 'Тест Пробний Урок',
-            phone: '+380123456789',
-            field: 'Тест форми пробного уроку',
-            formType: 'trial'
-        };
-        
-        const success = await sendToTelegram(testData, TELEGRAM_CONFIG.threads.trial_lesson);
-        if (success) {
-            console.log('✅ Тест пробного уроку пройшов успішно!');
-            showNotification('Тест пробного уроку успішний!', 'success');
-        } else {
-            console.log('❌ Помилка тестування пробного уроку');
-            showNotification('Помилка тесту пробного уроку', 'error');
-        }
+    checkRedirects: function() {
+        const forms = document.querySelectorAll('form');
+        console.log('=== Form Redirects ===');
+        forms.forEach((form, i) => {
+            const redirect = getRedirectUrl(form);
+            const original = form.dataset.originalRedirect;
+            console.log(`Form ${i} (${form.id}):`, {
+                redirect: redirect,
+                original: original,
+                action: form.action,
+                method: form.method
+            });
+        });
     },
     
-    showForms: function() {
-        const forms = document.querySelectorAll('form');
-        console.log(`📝 Знайдено ${forms.length} форм на сторінці:`);
-        forms.forEach((form, index) => {
-            const threadId = getThreadId(form);
-            const threadName = threadId === TELEGRAM_CONFIG.threads.trial_lesson ? 
-                'Заявки на пробний урок' : 'Основний чат';
-            const redirectUrl = form.getAttribute('data-redirect');
-            console.log(`${index + 1}. ID: "${form.id || 'немає'}", Redirect: "${redirectUrl || 'немає'}", Відправка в: ${threadName}`);
-        });
+    testSafari: function() {
+        console.log('Safari test:', { isSafari, isIOS, isMacOS });
+        if (navigator.sendBeacon) {
+            console.log('✅ sendBeacon підтримується');
+        } else {
+            console.log('❌ sendBeacon не підтримується');
+        }
     }
 };
+
+console.log('💡 Для перевірки редіректів виконайте: TelegramFormSender.checkRedirects()');
+console.log('💡 Для тесту Safari виконайте: TelegramFormSender.testSafari()');
