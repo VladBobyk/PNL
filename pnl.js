@@ -8,13 +8,46 @@ const TELEGRAM_CONFIG = {
     }
 };
 
+// КОНФІГУРАЦІЯ РЕДІРЕКТІВ
+const FORM_REDIRECTS = {
+    'wf-form-mini-course': 'https://secure.wayforpay.com/button/bd657e01a78cf',
+    'wf-form-building': 'https://secure.wayforpay.com/button/b00942ef5e150',
+    'wf-form-consultation': 'https://secure.wayforpay.com/button/b02d2b96f6458',
+    'wf-form-mentoring': 'https://secure.wayforpay.com/button/bda5beed8e82d',
+    'wf-form-free': 'https://www.pnl.com.ua/dyakuiemo-za-pokupku-bezkoshtovnogo-mini-kurs'
+};
+
 // Перевірка Safari/iOS
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 console.log('📱 Device:', { isIOS, isSafari });
+console.log('🔗 Redirects configured:', FORM_REDIRECTS);
 
-// Простий збір даних
+// Функція показу повідомлень
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        border-radius: 5px;
+        color: white;
+        font-weight: 500;
+        z-index: 10000;
+        background-color: ${type === 'success' ? '#4CAF50' : '#f44336'};
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        document.body.removeChild(notification);
+    }, 3000);
+}
+
+// Збір даних з форми
 function collectFormData(form) {
     const formData = {};
     
@@ -27,30 +60,28 @@ function collectFormData(form) {
     if (fieldField) formData.field = fieldField.value.trim();
     
     // Визначаємо тип форми
-    if (form.id === 'wf-form-free' || form.classList.contains('forma-free')) {
-        formData.formType = 'trial';
-    } else {
-        formData.formType = 'general';
-    }
+    formData.formId = form.id;
+    formData.formType = form.id === 'wf-form-free' ? 'trial' : 'general';
     
     return formData;
 }
 
-// Спрощене форматування повідомлення
+// Форматування повідомлення
 function formatMessage(formData) {
     const currentTime = new Date().toLocaleString('uk-UA');
-    let message = `🔔 Нова заявка з сайту\n`;
-    message += `📅 Дата: ${currentTime}\n\n`;
+    let message = `🔔 <b>Нова заявка з сайту</b>\n`;
+    message += `📅 <b>Дата:</b> ${currentTime}\n`;
+    message += `📋 <b>Форма:</b> ${formData.formId}\n\n`;
     
-    if (formData.name) message += `👤 Ім'я: ${formData.name}\n`;
-    if (formData.phone) message += `📱 Телефон: ${formData.phone}\n`;
-    if (formData.field) message += `📝 Інфо: ${formData.field}\n`;
-    message += `\n🌐 Сторінка: ${window.location.href}`;
+    if (formData.name) message += `👤 <b>Ім'я:</b> ${formData.name}\n`;
+    if (formData.phone) message += `📱 <b>Телефон:</b> ${formData.phone}\n`;
+    if (formData.field) message += `📝 <b>Інфо:</b> ${formData.field}\n`;
+    message += `\n🌐 <b>Сторінка:</b> ${window.location.href}`;
     
     return message;
 }
 
-// КРИТИЧНО: Використовуємо sendBeacon для Safari
+// Відправка в Telegram через sendBeacon (для Safari)
 function sendToTelegramBeacon(formData, threadId) {
     try {
         const message = formatMessage(formData);
@@ -66,171 +97,225 @@ function sendToTelegramBeacon(formData, threadId) {
             data.message_thread_id = threadId;
         }
         
-        // Для Safari/iOS використовуємо sendBeacon
         if (navigator.sendBeacon) {
             const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
             navigator.sendBeacon(url, blob);
-            console.log('📤 Sent via sendBeacon');
         } else {
-            // Fallback - використовуємо fetch але НЕ чекаємо відповіді
+            // Fallback через fetch з keepalive
             fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
-                keepalive: true // Важливо для Safari!
+                keepalive: true
             }).catch(() => {});
-            console.log('📤 Sent via fetch');
         }
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error sending to Telegram:', error);
     }
 }
 
-// ГОЛОВНЕ: Мінімальне втручання в роботу форми
-function setupForm(form) {
-    // НЕ використовуємо preventDefault!
-    // Просто слухаємо подію і відправляємо дані паралельно
+// Функція редіректу
+function performRedirect(formId) {
+    const redirectUrl = FORM_REDIRECTS[formId];
     
-    form.addEventListener('submit', function(e) {
-        // НЕ блокуємо форму!
-        // Просто збираємо дані і відправляємо в фоні
+    if (redirectUrl) {
+        console.log(`🔄 Redirecting form ${formId} to: ${redirectUrl}`);
+        showNotification('Переходимо до оплати...', 'success');
         
-        try {
-            const formData = collectFormData(form);
-            
-            // Перевірка чи є дані
-            if (!formData.name && !formData.phone) {
-                return; // Нічого не робимо, даємо Webflow працювати
-            }
-            
-            // Визначаємо thread
-            const threadId = (form.id === 'wf-form-free' || form.classList.contains('forma-free')) 
-                ? TELEGRAM_CONFIG.threads.trial_lesson 
-                : TELEGRAM_CONFIG.threads.general;
-            
-            // Відправляємо через beacon (не блокує форму!)
-            sendToTelegramBeacon(formData, threadId);
-            
-        } catch (error) {
-            console.error('Error in form handler:', error);
-            // При помилці - нічого не робимо, даємо формі працювати
-        }
-        
-        // Форма продовжує працювати нормально!
-    }, false); // Використовуємо bubble phase
+        // Затримка для показу повідомлення
+        setTimeout(() => {
+            window.location.href = redirectUrl;
+        }, 500);
+    } else {
+        console.warn(`⚠️ No redirect URL configured for form: ${formId}`);
+    }
 }
 
-// ВАРІАНТ 2: Якщо перший не працює, спробуйте цей
-function setupFormAlternative(form) {
-    // Використовуємо Webflow події якщо вони доступні
-    if (window.Webflow && window.$) {
-        const $form = $(form);
-        
-        // Слухаємо успішну відправку Webflow форми
-        $form.on('submit', function() {
-            try {
-                const formData = collectFormData(form);
-                if (formData.name || formData.phone) {
-                    const threadId = (form.id === 'wf-form-free') 
-                        ? TELEGRAM_CONFIG.threads.trial_lesson 
-                        : TELEGRAM_CONFIG.threads.general;
-                    sendToTelegramBeacon(formData, threadId);
+// Головна функція обробки форми
+function handleFormSubmit(event) {
+    const form = event.target;
+    if (!form || !form.id) return;
+    
+    // Перевіряємо чи форма вже обробляється
+    if (form.dataset.processing === 'true') return;
+    
+    console.log(`📝 Processing form: ${form.id}`);
+    
+    // Збираємо дані
+    const formData = collectFormData(form);
+    
+    // Валідація
+    if (!formData.name && !formData.phone) {
+        return; // Пропускаємо якщо немає даних
+    }
+    
+    // Маркуємо форму
+    form.dataset.processing = 'true';
+    
+    // Визначаємо thread ID
+    const threadId = form.id === 'wf-form-free' 
+        ? TELEGRAM_CONFIG.threads.trial_lesson 
+        : TELEGRAM_CONFIG.threads.general;
+    
+    // Відправляємо в Telegram (асинхронно, не блокуємо форму)
+    sendToTelegramBeacon(formData, threadId);
+    
+    // Блокуємо стандартний редірект Webflow
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Відправляємо форму через AJAX для Webflow
+    const formElement = form;
+    const formData2 = new FormData(formElement);
+    
+    // Знаходимо action URL
+    const actionUrl = form.action || form.getAttribute('action') || window.location.href;
+    
+    // Відправляємо форму
+    fetch(actionUrl, {
+        method: 'POST',
+        body: formData2
+    })
+    .then(response => {
+        console.log('✅ Form submitted to Webflow');
+        // Робимо наш редірект
+        performRedirect(form.id);
+    })
+    .catch(error => {
+        console.error('Error submitting form:', error);
+        // Все одно робимо редірект
+        performRedirect(form.id);
+    })
+    .finally(() => {
+        setTimeout(() => {
+            form.dataset.processing = 'false';
+        }, 1000);
+    });
+    
+    return false; // Блокуємо стандартну поведінку
+}
+
+// Альтернативний метод для Safari
+function setupFormForSafari(form) {
+    if (!form.id || !FORM_REDIRECTS[form.id]) return;
+    
+    // Для Safari на iOS використовуємо інший підхід
+    const submitButton = form.querySelector('input[type="submit"], button[type="submit"]');
+    
+    if (submitButton) {
+        submitButton.addEventListener('click', function(e) {
+            // Не блокуємо клік, просто готуємо редірект
+            setTimeout(() => {
+                if (form.checkValidity && form.checkValidity()) {
+                    const formData = collectFormData(form);
+                    
+                    if (formData.name || formData.phone) {
+                        // Відправляємо в Telegram
+                        const threadId = form.id === 'wf-form-free' 
+                            ? TELEGRAM_CONFIG.threads.trial_lesson 
+                            : TELEGRAM_CONFIG.threads.general;
+                        sendToTelegramBeacon(formData, threadId);
+                        
+                        // Редірект через затримку
+                        setTimeout(() => {
+                            performRedirect(form.id);
+                        }, 1000);
+                    }
                 }
-            } catch (error) {
-                console.error('Error:', error);
-            }
+            }, 100);
         });
-        
-        console.log('✅ Form setup via jQuery');
     }
 }
 
 // Ініціалізація
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Telegram Form Sender Init (Safari-optimized)');
+    console.log('🚀 Telegram Form Sender with Custom Redirects');
     
     // Чекаємо на Webflow
     if (window.Webflow) {
         window.Webflow.push(function() {
             console.log('📦 Webflow ready');
-            initForms();
+            initializeForms();
         });
     } else {
-        // Якщо Webflow не знайдено, ініціалізуємо одразу
-        setTimeout(initForms, 100);
+        setTimeout(initializeForms, 100);
     }
 });
 
-function initForms() {
+function initializeForms() {
     const forms = document.querySelectorAll('form');
     console.log(`📋 Found ${forms.length} forms`);
     
-    forms.forEach((form, index) => {
-        console.log(`Setting up form ${index}: ${form.id || 'no-id'}`);
+    forms.forEach(form => {
+        if (!form.id) {
+            console.warn('⚠️ Form without ID found, skipping');
+            return;
+        }
         
-        // Використовуємо простий метод
-        setupForm(form);
+        console.log(`Setting up form: ${form.id}`);
         
-        // Якщо є jQuery - додаємо альтернативний метод
-        if (window.$) {
-            setupFormAlternative(form);
+        // Видаляємо Webflow redirect атрибути
+        form.removeAttribute('data-redirect');
+        form.removeAttribute('redirect');
+        
+        // Основний обробник
+        form.addEventListener('submit', handleFormSubmit, true);
+        
+        // Додатковий обробник для Safari
+        if (isIOS || isSafari) {
+            setupFormForSafari(form);
+        }
+        
+        // Показуємо налаштований редірект
+        const redirectUrl = FORM_REDIRECTS[form.id];
+        if (redirectUrl) {
+            console.log(`✅ Form ${form.id} → ${redirectUrl}`);
+        } else {
+            console.log(`❌ Form ${form.id} → No redirect configured`);
         }
     });
-    
-    // Додатковий хак для Safari на iOS
-    if (isIOS && isSafari) {
-        console.log('🔧 iOS Safari detected - applying additional fixes');
-        
-        forms.forEach(form => {
-            // Додаємо прихований iframe для Safari
-            const iframe = document.createElement('iframe');
-            iframe.name = 'hidden_iframe_' + Math.random();
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-            
-            // Встановлюємо target на форму (допомагає з редіректом в Safari)
-            if (!form.target) {
-                form.target = iframe.name;
-                
-                // Після відправки форми - робимо редірект вручну
-                iframe.onload = function() {
-                    const redirectUrl = form.getAttribute('data-redirect') || 
-                                      form.getAttribute('redirect');
-                    if (redirectUrl) {
-                        console.log('Manual redirect to:', redirectUrl);
-                        window.location.href = redirectUrl;
-                    }
-                };
-            }
-        });
-    }
 }
 
-// Простий debug helper
-window.FormDebug = {
+// Debug API
+window.FormRedirects = {
+    // Показати всі форми та їх редіректи
     check: function() {
-        document.querySelectorAll('form').forEach((form, i) => {
-            console.log(`Form ${i}:`, {
-                id: form.id,
-                action: form.action,
-                redirect: form.getAttribute('data-redirect'),
-                target: form.target
-            });
+        console.log('=== Form Redirects Configuration ===');
+        document.querySelectorAll('form').forEach(form => {
+            const redirectUrl = FORM_REDIRECTS[form.id];
+            console.log(`${form.id}: ${redirectUrl || 'NOT CONFIGURED'}`);
         });
     },
     
-    testBeacon: function() {
-        if (navigator.sendBeacon) {
-            console.log('✅ sendBeacon supported');
-            const testData = { test: true };
-            const blob = new Blob([JSON.stringify(testData)], { type: 'application/json' });
-            const result = navigator.sendBeacon('/test', blob);
-            console.log('Test beacon sent:', result);
+    // Тест редіректу для конкретної форми
+    testRedirect: function(formId) {
+        if (FORM_REDIRECTS[formId]) {
+            console.log(`Testing redirect for ${formId}...`);
+            performRedirect(formId);
         } else {
-            console.log('❌ sendBeacon NOT supported');
+            console.error(`No redirect configured for form: ${formId}`);
         }
+    },
+    
+    // Тест відправки форми
+    testSubmit: function(formId) {
+        const form = document.getElementById(formId);
+        if (form) {
+            console.log(`Testing submit for ${formId}...`);
+            const event = new Event('submit', { bubbles: true, cancelable: true });
+            form.dispatchEvent(event);
+        } else {
+            console.error(`Form not found: ${formId}`);
+        }
+    },
+    
+    // Показати конфігурацію
+    showConfig: function() {
+        console.table(FORM_REDIRECTS);
     }
 };
 
-console.log('💡 Run FormDebug.check() to see all forms');
-console.log('💡 Run FormDebug.testBeacon() to test beacon API');
+console.log('💡 Команди для налагодження:');
+console.log('FormRedirects.check() - показати всі форми');
+console.log('FormRedirects.showConfig() - показати конфігурацію редіректів');
+console.log('FormRedirects.testRedirect("wf-form-free") - тест редіректу');
