@@ -12,10 +12,10 @@ const TELEGRAM_BOT_CONFIG = {
 
 // КОНФІГУРАЦІЯ РЕДІРЕКТІВ
 const FORM_REDIRECTS = {
-    'wf-form-mini-course': 'https://secure.wayforpay.com/button/bd657e01a78cf',
-    'wf-form-building': 'https://secure.wayforpay.com/button/b00942ef5e150',
-    'wf-form-consultation': 'https://secure.wayforpay.com/button/b02d2b96f6458',
-    'wf-form-mentoring': 'https://secure.wayforpay.com/button/bda5beed8e82d',
+    'wf-form-mini-course': 'https://secure.wayforpay.com/payment/pnl_course_1',
+    'wf-form-building': 'https://secure.wayforpay.com/payment/pnl_course_2',
+    'wf-form-consultation': 'https://secure.wayforpay.com/payment/pnl_consultation',
+    'wf-form-mentoring': 'https://secure.wayforpay.com/payment/pnl_mentorship',
     'wf-form-free': 'https://www.pnl.com.ua/dyakuiemo-za-pokupku-bezkoshtovnogo-mini-kurs'
 };
 
