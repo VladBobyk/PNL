@@ -13,7 +13,7 @@ const TELEGRAM_BOT_CONFIG = {
 // КОНФІГУРАЦІЯ РЕДІРЕКТІВ
 const FORM_REDIRECTS = {
     'wf-form-mini-course': 'https://secure.wayforpay.com/payment/pnl_course_1',
-    'wf-form-building': 'https://secure.wayforpay.com/payment/pnl_course_2',
+    'wf-form-building': 'https://secure.wayforpay.com/payment/course_pnl_2',
     'wf-form-consultation': 'https://secure.wayforpay.com/payment/pnl_consultation',
     'wf-form-mentoring': 'https://secure.wayforpay.com/payment/pnl_mentorship',
     'wf-form-free': 'https://www.pnl.com.ua/dyakuiemo-za-pokupku-bezkoshtovnogo-mini-kurs'
