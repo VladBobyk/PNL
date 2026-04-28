@@ -15,7 +15,7 @@ const TELEGRAM_BOT_CONFIG = {
 
 // URL вашого Google Apps Script Web App
 // (отримаєте після Deploy → New deployment → Web App)
-const SHEETS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzt4WFnDw1F6B8kdk8VQzhVmf7NxtQxJy2N7w477O3dCpQBUvI03wW0wdsj7E7fUOEj/exec';
+const SHEETS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzHTUh1RaI8ZaiJItOp9cwEBlewb0RbVRYADE1RgjaS2IufNRgEI3zLvSofHIPNPAVk/exec';
 
 // Секретний ключ — має збігатися з SHEET_CONFIG.secretKey в Apps Script
 const SHEETS_SECRET = 'pnl2026secret';
