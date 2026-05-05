@@ -1,25 +1,12 @@
-// ============================================================
-// Telegram Form Sender v3.0 — з Google Sheets + WayForPay
-// ============================================================
 
-// ─── КОНФІГУРАЦІЯ ────────────────────────────────────────────
+// URL Apps Script Web App (отримай після Deploy)
+const APP_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxSHRUUAA3xFfWIAvITDYyGvDjKA6te_yXyB2AN-KhoOJCoEgUyXFxcM1vKAuR5WU_r/exec';
 
-const TELEGRAM_BOT_CONFIG = {
-    botToken: '7972648152:AAEkEvxuTv4wrX0LEQkNhzSr7RRdRilA4-I',
-    chatId: '-1002699091130',
-    threads: {
-        'trial_lesson': 1809,
-        'general': null,
-    },
-};
+// Не реальний секрет — це лише захист endpoint від випадкових ботів.
+// Має збігатися з SHEET_CONFIG.secretKey в Apps Script.
+const APP_SECRET = 'pnl2026secret';
 
-// URL вашого Google Apps Script Web App
-// (отримаєте після Deploy → New deployment → Web App)
-const SHEETS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzdHxRUEwWmEpLIU00ju0RiOb7nbGbwK-QMQNC0mRFUEFMgGUwKTSPez_JJ0KQ1CVk5/exec';
-
-// Секретний ключ — має збігатися з SHEET_CONFIG.secretKey в Apps Script
-const SHEETS_SECRET = 'pnl2026secret';
-
+// Куди редіректити після відправки форми
 const FORM_REDIRECTS = {
     'wf-form-mini-course':   'https://secure.wayforpay.com/payment/pnl_course_1',
     'wf-form-building':      'https://secure.wayforpay.com/payment/course_pnl_2',
@@ -28,13 +15,7 @@ const FORM_REDIRECTS = {
     'wf-form-free':          'https://www.pnl.com.ua/dyakuiemo-za-pokupku-bezkoshtovnogo-mini-kurs',
 };
 
-// ─── DEVICE DETECTION ────────────────────────────────────────
-
-const isIOS    = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-console.log('🚀 Form Sender v3.0 — Telegram + Sheets + WayForPay');
-console.log('📱 Device:', { isIOS, isSafari });
+console.log('🚀 Form Sender v4.0');
 
 // ─── UI: Сповіщення ──────────────────────────────────────────
 
@@ -54,7 +35,6 @@ function showNotification(message, type = 'success') {
         animation: fsSlideIn .3s ease;
     `;
 
-    // Додаємо анімацію якщо ще не є
     if (!document.getElementById('fs-style')) {
         const style = document.createElement('style');
         style.id = 'fs-style';
@@ -87,7 +67,6 @@ function collectFormData(form) {
 
     return {
         formId:   form.id,
-        formType: form.id === 'wf-form-free' ? 'trial' : 'paid',
         name:     get('#name', 'input[name="name"]', 'input[type="text"]:not([type="hidden"])'),
         phone:    get('#Phone-2', '#phone', 'input[name="phone"]', 'input[type="tel"]'),
         field:    get('#field', 'textarea', 'input[name="message"]'),
@@ -102,94 +81,29 @@ function collectFormData(form) {
     };
 }
 
-// ─── TELEGRAM ────────────────────────────────────────────────
+// ─── ВІДПРАВКА в Apps Script (Sheets + Telegram) ────────────
 
-function getThreadId(form) {
-    return form.id === 'wf-form-free'
-        ? TELEGRAM_BOT_CONFIG.threads.trial_lesson
-        : TELEGRAM_BOT_CONFIG.threads.general;
-}
-
-function formatTelegramMessage(data) {
-    const { name, phone, field, formId, formType, pageUrl, utm } = data;
-    const time = new Date().toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' });
-
-    const formLabels = {
-        'wf-form-mini-course':  '📦 Міні-курс',
-        'wf-form-building':     '🏗️ Курс «Будівництво»',
-        'wf-form-consultation': '🤝 Консультація',
-        'wf-form-mentoring':    '🎓 Менторинг',
-        'wf-form-free':         '🎁 Безкоштовний міні-курс',
-    };
-
-    let msg = `🔔 <b>Нова заявка</b>\n`;
-    msg += `📅 ${time}\n`;
-    msg += `📋 ${formLabels[formId] || formId}\n`;
-    msg += `\n`;
-    if (name)  msg += `👤 <b>Ім'я:</b> ${name}\n`;
-    if (phone) msg += `📱 <b>Телефон:</b> ${phone}\n`;
-    if (field) msg += `📝 <b>Повідомлення:</b> ${field}\n`;
-    msg += `\n🌐 <a href="${pageUrl}">Сторінка</a>`;
-
-    const utmLines = Object.entries(utm).filter(([, v]) => v);
-    if (utmLines.length) {
-        msg += `\n\n📊 <b>UTM:</b>\n`;
-        utmLines.forEach(([k, v]) => { msg += `• ${k}: ${v}\n`; });
-    }
-
-    return msg;
-}
-
-async function sendToTelegram(data) {
-    try {
-        const threadId = getThreadId({ id: data.formId });
-        const payload  = {
-            chat_id:                 TELEGRAM_BOT_CONFIG.chatId,
-            text:                    formatTelegramMessage(data),
-            parse_mode:              'HTML',
-            disable_web_page_preview: false,
-        };
-        if (threadId !== null && threadId !== undefined) {
-            payload.message_thread_id = threadId;
-        }
-
-        const res = await fetch(
-            `https://api.telegram.org/bot${TELEGRAM_BOT_CONFIG.botToken}/sendMessage`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true }
-        );
-        const json = await res.json();
-        console.log('Telegram:', json.ok ? '✅ OK' : '❌ Failed', json.description || '');
-        return json.ok;
-    } catch (err) {
-        console.error('Telegram error:', err);
-        return false;
-    }
-}
-
-// ─── GOOGLE SHEETS ───────────────────────────────────────────
-
-async function sendToSheets(data) {
-    if (!SHEETS_ENDPOINT || SHEETS_ENDPOINT.startsWith('ВСТАВТЕ')) {
-        console.warn('⚠️ Google Sheets endpoint not configured');
+async function sendToBackend(data) {
+    if (!APP_ENDPOINT || APP_ENDPOINT.includes('ВСТАВТЕ')) {
+        console.warn('⚠️ App endpoint not configured');
         return false;
     }
 
     try {
-        const payload = { ...data, secretKey: SHEETS_SECRET };
+        const payload = { ...data, secretKey: APP_SECRET };
 
-        const res = await fetch(SHEETS_ENDPOINT, {
+        await fetch(APP_ENDPOINT, {
             method:    'POST',
-            mode:      'no-cors', // Apps Script не повертає CORS-заголовки
-            headers:   { 'Content-Type': 'text/plain' }, // no-cors обмеження
+            mode:      'no-cors',
+            headers:   { 'Content-Type': 'text/plain' },
             body:      JSON.stringify(payload),
             keepalive: true,
         });
 
-        // З no-cors ми не бачимо відповіді, але запит дійде
-        console.log('Google Sheets: ✅ Request sent (no-cors)');
+        console.log('Backend: ✅ Request sent');
         return true;
     } catch (err) {
-        console.error('Sheets error:', err);
+        console.error('Backend error:', err);
         return false;
     }
 }
@@ -203,9 +117,7 @@ function performRedirect(formId, delayMs = 600) {
         return false;
     }
     console.log(`🔄 Redirect → ${url}`);
-    setTimeout(() => {
-        window.location.href = url.startsWith('www.') ? 'https://' + url : url;
-    }, delayMs);
+    setTimeout(() => { window.location.href = url; }, delayMs);
     return true;
 }
 
@@ -217,14 +129,11 @@ async function handleFormSubmit(event) {
     if (form.dataset.processing === 'true') return;
 
     const data = collectFormData(form);
-
-    // Нічого не збирати — форма без контактів
     if (!data.name && !data.phone) {
         console.log('No contact data — skipping');
         return;
     }
 
-    // Якщо є кастомний редірект — перехоплюємо сабміт
     const hasRedirect = !!FORM_REDIRECTS[form.id];
     if (hasRedirect) {
         event.preventDefault();
@@ -232,22 +141,16 @@ async function handleFormSubmit(event) {
     }
 
     form.dataset.processing = 'true';
-
     const btn = form.querySelector('input[type="submit"], button[type="submit"]');
     if (btn) { btn.disabled = true; btn.style.opacity = '.5'; }
 
     try {
         console.log(`📝 Submitting: ${form.id}`);
 
-        // Паралельно: Telegram + Sheets (не блокуємо одне одним)
-        const [telegramOk] = await Promise.allSettled([
-            sendToTelegram(data),
-            sendToSheets(data),
-        ]);
+        await sendToBackend(data);
+        showNotification('Заявку відправлено! ✓');
 
-        if (telegramOk.value) showNotification('Заявку відправлено! ✓');
-
-        // Відправляємо і в Webflow (для їх власної аналітики)
+        // Дублюємо у Webflow для їхньої аналітики
         if (form.action && !form.action.includes(window.location.pathname)) {
             fetch(form.action, { method: 'POST', body: new FormData(form) }).catch(() => {});
         }
@@ -258,7 +161,6 @@ async function handleFormSubmit(event) {
         console.error('Submit error:', err);
         showNotification('Помилка відправки', 'error');
         if (hasRedirect) performRedirect(form.id, 1200);
-
     } finally {
         setTimeout(() => {
             if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
@@ -271,7 +173,7 @@ async function handleFormSubmit(event) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const forms = document.querySelectorAll('form[id]');
-    console.log(`\n📦 Found ${forms.length} form(s) with ID`);
+    console.log(`📦 Found ${forms.length} form(s) with ID`);
 
     forms.forEach(form => {
         form.removeEventListener('submit', handleFormSubmit);
@@ -281,30 +183,20 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`  • ${form.id} → ${redirect ? redirect.slice(0, 45) + '…' : '(no redirect)'}`);
     });
 
-    console.log('✅ Forms ready\n');
+    console.log('✅ Forms ready');
 });
 
 // ─── DEBUG API ───────────────────────────────────────────────
 
 window.FormDebug = {
-    check:   () => document.querySelectorAll('form[id]').forEach((f, i) =>
-                     console.log(`${i}. ${f.id} → ${FORM_REDIRECTS[f.id] || 'no redirect'}`)),
-    config:  () => console.table(FORM_REDIRECTS),
-    telegram: async (formId) => {
+    check:  () => document.querySelectorAll('form[id]').forEach((f, i) =>
+                    console.log(`${i}. ${f.id} → ${FORM_REDIRECTS[f.id] || 'no redirect'}`)),
+    send:   async (formId) => {
         const form = document.getElementById(formId);
         if (!form) return console.error('Form not found:', formId);
         const data = collectFormData(form);
-        const ok = await sendToTelegram(data);
-        console.log('Telegram test:', ok ? '✅ OK' : '❌ Failed');
-    },
-    sheets: async (formId) => {
-        const form = document.getElementById(formId);
-        if (!form) return console.error('Form not found:', formId);
-        const data = collectFormData(form);
-        const ok = await sendToSheets(data);
-        console.log('Sheets test:', ok ? '✅ Sent' : '❌ Failed');
+        const ok = await sendToBackend(data);
+        console.log('Test send:', ok ? '✅ OK' : '❌ Failed');
     },
     redirect: (formId) => performRedirect(formId),
 };
-
-console.log('💡 Debug: FormDebug.check() | .telegram("id") | .sheets("id") | .redirect("id")');
