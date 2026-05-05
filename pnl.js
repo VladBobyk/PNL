@@ -1,6 +1,6 @@
 
 // URL Apps Script Web App (отримай після Deploy)
-const APP_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyiBfW87AW6Av94TS4jqiaI1qCji8A7wpJ4Bo0Rj3EGGhhq2_zIqFLjxJeskmOt0sqM/exec';
+const APP_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxMIR2QWDpWvbqzn3OHXhgq4-YHCKEn2ICwPu_G3JO3tbxNU3w0s4r2u6PGjWHo1jfb/exec';
 
 // Не реальний секрет — це лише захист endpoint від випадкових ботів.
 // Має збігатися з SHEET_CONFIG.secretKey в Apps Script.
