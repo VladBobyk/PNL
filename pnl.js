@@ -1,12 +1,14 @@
+// ============================================================
+// Form Sender v4.1 — все через Apps Script + sendBeacon
+// ============================================================
 
-// URL Apps Script Web App (отримай після Deploy)
+// URL Apps Script Web App
 const APP_ENDPOINT = 'https://script.google.com/macros/s/AKfycby8zMfrSKy1u0BglfnVfteKBiQbSK5-zjgAmpBGQpKLwkMadhZNaR-hV_LmE0z0hgmY/exec';
 
-// Не реальний секрет — це лише захист endpoint від випадкових ботів.
+// Не реальний секрет — захист endpoint від випадкових ботів.
 // Має збігатися з SHEET_CONFIG.secretKey в Apps Script.
 const APP_SECRET = 'pnl2026secret';
 
-// Куди редіректити після відправки форми
 const FORM_REDIRECTS = {
     'wf-form-mini-course':   'https://secure.wayforpay.com/payment/pnl_course_1',
     'wf-form-building':      'https://secure.wayforpay.com/payment/course_pnl_2',
@@ -15,7 +17,7 @@ const FORM_REDIRECTS = {
     'wf-form-free':          'https://www.pnl.com.ua/dyakuiemo-za-pokupku-bezkoshtovnogo-mini-kurs',
 };
 
-console.log('🚀 Form Sender v4.0');
+console.log('🚀 Form Sender v4.1 (fast)');
 
 // ─── UI: Сповіщення ──────────────────────────────────────────
 
@@ -81,36 +83,44 @@ function collectFormData(form) {
     };
 }
 
-// ─── ВІДПРАВКА в Apps Script (Sheets + Telegram) ────────────
+// ─── ВІДПРАВКА в Apps Script (через sendBeacon — миттєво) ────
 
-async function sendToBackend(data) {
+function sendToBackend(data) {
     if (!APP_ENDPOINT || APP_ENDPOINT.includes('ВСТАВТЕ')) {
         console.warn('⚠️ App endpoint not configured');
         return false;
     }
 
-    try {
-        const payload = { ...data, secretKey: APP_SECRET };
+    const payload = JSON.stringify({ ...data, secretKey: APP_SECRET });
 
-        await fetch(APP_ENDPOINT, {
-            method:    'POST',
-            mode:      'no-cors',
-            headers:   { 'Content-Type': 'text/plain' },
-            body:      JSON.stringify(payload),
-            keepalive: true,
-        });
-
-        console.log('Backend: ✅ Request sent');
-        return true;
-    } catch (err) {
-        console.error('Backend error:', err);
-        return false;
+    // sendBeacon — миттєво ставить запит в чергу браузера.
+    // Запит виконається у фоні, навіть якщо сторінка вже редіректить.
+    if (navigator.sendBeacon) {
+        try {
+            const blob = new Blob([payload], { type: 'text/plain' });
+            const ok = navigator.sendBeacon(APP_ENDPOINT, blob);
+            console.log('Backend:', ok ? '✅ Queued (beacon)' : '⚠️ Beacon failed, fallback');
+            if (ok) return true;
+        } catch (err) {
+            console.warn('Beacon error:', err);
+        }
     }
+
+    // Fallback: fetch з keepalive
+    fetch(APP_ENDPOINT, {
+        method:    'POST',
+        mode:      'no-cors',
+        headers:   { 'Content-Type': 'text/plain' },
+        body:      payload,
+        keepalive: true,
+    }).catch(err => console.error('Backend error:', err));
+    console.log('Backend: ✅ Sent (fetch)');
+    return true;
 }
 
 // ─── РЕДІРЕКТ ────────────────────────────────────────────────
 
-function performRedirect(formId, delayMs = 600) {
+function performRedirect(formId, delayMs = 300) {
     const url = FORM_REDIRECTS[formId];
     if (!url) {
         console.warn('No redirect for:', formId);
@@ -123,7 +133,7 @@ function performRedirect(formId, delayMs = 600) {
 
 // ─── ГОЛОВНИЙ ОБРОБНИК ───────────────────────────────────────
 
-async function handleFormSubmit(event) {
+function handleFormSubmit(event) {
     const form = event.target;
     if (!form?.id) return;
     if (form.dataset.processing === 'true') return;
@@ -147,12 +157,13 @@ async function handleFormSubmit(event) {
     try {
         console.log(`📝 Submitting: ${form.id}`);
 
-        await sendToBackend(data);
+        // Fire-and-forget — не чекаємо відповіді
+        sendToBackend(data);
         showNotification('Заявку відправлено! ✓');
 
         // Дублюємо у Webflow для їхньої аналітики
         if (form.action && !form.action.includes(window.location.pathname)) {
-            fetch(form.action, { method: 'POST', body: new FormData(form) }).catch(() => {});
+            fetch(form.action, { method: 'POST', body: new FormData(form), keepalive: true }).catch(() => {});
         }
 
         if (hasRedirect) performRedirect(form.id);
@@ -160,7 +171,7 @@ async function handleFormSubmit(event) {
     } catch (err) {
         console.error('Submit error:', err);
         showNotification('Помилка відправки', 'error');
-        if (hasRedirect) performRedirect(form.id, 1200);
+        if (hasRedirect) performRedirect(form.id, 800);
     } finally {
         setTimeout(() => {
             if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
@@ -191,11 +202,11 @@ document.addEventListener('DOMContentLoaded', () => {
 window.FormDebug = {
     check:  () => document.querySelectorAll('form[id]').forEach((f, i) =>
                     console.log(`${i}. ${f.id} → ${FORM_REDIRECTS[f.id] || 'no redirect'}`)),
-    send:   async (formId) => {
+    send:   (formId) => {
         const form = document.getElementById(formId);
         if (!form) return console.error('Form not found:', formId);
         const data = collectFormData(form);
-        const ok = await sendToBackend(data);
+        const ok = sendToBackend(data);
         console.log('Test send:', ok ? '✅ OK' : '❌ Failed');
     },
     redirect: (formId) => performRedirect(formId),
